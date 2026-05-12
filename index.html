@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>MATTER & ORDER | 质序点单</title>
+    <style>
+        :root {
+            --black: #1a1a1a; --white: #fcfcfc; --green: #a7c957; --green-deep: #8ab03e;
+            --red: #e07a5f; --amber: #f4a261; --border: #e8e8e8; --gray: #999;
+            --gray-light: #f5f5f5; --radius: 16px; --radius-sm: 10px;
+            --font: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+            --ease-out: cubic-bezier(0, 0, 0.2, 1);
+            --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        html { scroll-behavior:smooth; }
+        body {
+            background:var(--white); font-family:var(--font); color:var(--black);
+            line-height:1.5; max-width:480px; margin:0 auto; min-height:100vh;
+            position:relative; overflow-x:hidden; -webkit-font-smoothing:antialiased;
+        }
+
+        /* ===== SVG ICONS ===== */
+        .ic { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+        .ic-sm { width:16px; height:16px; }
+        .ic-lg { width:28px; height:28px; stroke-width:1.8; }
+        .ic-xl { width:48px; height:48px; stroke-width:1.5; }
+        .ic-2xl { width:72px; height:72px; stroke-width:1.2; }
+
+        /* ===== APP SHELL ===== */
+        #app { min-height:100vh; position:relative; }
+        .screen {
+            position:absolute; top:0; left:0; width:100%; min-height:100vh;
+            background:var(--white); z-index:1; display:none;
+        }
+        .screen.active { display:block; z-index:10; }
+        .screen.anim-in { animation: slideIn 0.38s var(--ease-out); }
+        .screen.anim-back { animation: slideBack 0.32s var(--ease-out); }
+        @keyframes slideIn { from { transform:translateX(30px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+        @keyframes slideBack { from { transform:translateX(-20px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+
+        /* ===== SPLASH ===== */
+        .splash-screen {
+            background:#0d0d0d; display:flex; flex-direction:column; align-items:center;
+            justify-content:center; min-height:100vh; overflow:hidden; cursor:pointer;
+        }
+        .splash-screen.active { display:flex; }
+        .splash-blob {
+            width:140px; height:140px; background:var(--green); border-radius:60% 40% 70% 30% / 50% 45% 55% 50%;
+            filter:blur(8px); opacity:0.85; animation:splashMorph 3s infinite linear;
+            position:absolute; z-index:0;
+        }
+        @keyframes splashMorph {
+            0% { border-radius:60% 40% 70% 30% / 50% 45% 55% 50%; transform:rotate(0deg) scale(1); }
+            33% { border-radius:40% 60% 30% 70% / 55% 50% 45% 50%; transform:rotate(120deg) scale(1.15); }
+            66% { border-radius:55% 45% 40% 60% / 40% 55% 50% 60%; transform:rotate(240deg) scale(0.9); }
+            100% { border-radius:60% 40% 70% 30% / 50% 45% 55% 50%; transform:rotate(360deg) scale(1); }
+        }
+        .splash-content { z-index:1; text-align:center; }
+        .splash-logo {
+            font-size:32px; font-weight:900; letter-spacing:-1px; color:white;
+            animation:logoReveal 0.8s var(--ease-out) 0.3s both;
+        }
+        .splash-sub {
+            font-size:13px; color:rgba(255,255,255,0.5); margin-top:8px; letter-spacing:4px;
+            animation:logoReveal 0.8s var(--ease-out) 0.55s both;
+        }
+        .splash-hint {
+            position:absolute; bottom:60px; color:rgba(255,255,255,0.25); font-size:11px;
+            animation:pulse 2s infinite;
+        }
+        @keyframes logoReveal { from { opacity:0; transform:translateY(20px) scale(0.9); } to { opacity:1; transform:translateY(0) scale(1); } }
+        @keyframes pulse { 0%,100% { opacity:0.2; } 50% { opacity:0.5; } }
+
+        /* ===== LOGIN ===== */
+        .login-screen { background:var(--white); }
+        .login-screen.active { display:flex; flex-direction:column; }
+        .login-header {
+            padding:80px 28px 32px; text-align:center;
+        }
+        .login-header h1 { font-size:28px; font-weight:900; letter-spacing:-1px; }
+        .login-header p { font-size:13px; color:var(--gray); margin-top:6px; }
+        .login-form { padding:0 28px; flex:1; }
+        .input-group { margin-bottom:20px; }
+        .input-group label { display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:#555; text-transform:uppercase; letter-spacing:1px; }
+        .input-field {
+            width:100%; height:52px; border:2px solid var(--border); border-radius:14px;
+            padding:0 16px; font-size:16px; font-family:var(--font); outline:none;
+            transition:all 0.25s ease; background:var(--gray-light);
+            display:flex; align-items:center;
+        }
+        input.input-field { display:block; }
+        .input-field:focus { border-color:var(--black); background:white; }
+        .input-row { display:flex; gap:10px; }
+        .input-row .input-field { flex:1; }
+        .btn-sms {
+            height:52px; padding:0 18px; border-radius:14px; border:none;
+            background:var(--black); color:white; font-size:13px; font-weight:700;
+            white-space:nowrap; cursor:pointer; transition:all 0.25s ease;
+        }
+        .btn-sms:active { background:var(--green); color:var(--black); }
+        .btn-sms.counting { background:var(--border); color:var(--gray); }
+        .login-btn {
+            width:100%; height:52px; border-radius:14px; border:none;
+            background:var(--black); color:white; font-size:16px; font-weight:700;
+            cursor:pointer; margin-top:8px; transition:all 0.3s ease;
+        }
+        .login-btn:active { background:var(--green); color:var(--black); transform:scale(0.98); }
+        .login-skip {
+            text-align:center; margin-top:16px; font-size:13px; color:var(--gray); cursor:pointer;
+            padding:12px; transition:color 0.2s;
+        }
+        .login-skip:hover { color:var(--black); }
+
+        /* ===== HEADER ===== */
+        .app-header {
+            padding:44px 20px 14px; background:rgba(252,252,252,0.92);
+            backdrop-filter:blur(12px); position:sticky; top:0; z-index:50;
+            display:flex; justify-content:space-between; align-items:flex-start;
+        }
+        .header-left { display:flex; align-items:center; gap:10px; }
+        .back-btn {
+            width:34px; height:34px; border-radius:50%; border:1px solid var(--border);
+            background:white; cursor:pointer; display:none; align-items:center; justify-content:center;
+            transition:all 0.2s;
+        }
+        .back-btn.show { display:flex; }
+        .back-btn:active { background:var(--black); color:white; }
+        .logo-group .logo { font-size:22px; font-weight:900; letter-spacing:-0.5px; text-transform:uppercase; }
+        .logo-group .subtitle { font-size:11px; color:var(--gray); margin-top:2px; display:flex; align-items:center; gap:4px; }
+        .header-actions { display:flex; gap:10px; align-items:center; }
+        .icon-btn {
+            width:38px; height:38px; border-radius:50%; border:1px solid var(--border);
+            background:white; cursor:pointer; display:flex; align-items:center; justify-content:center;
+            position:relative; transition:all 0.2s; color:var(--black);
+        }
+        .icon-btn:active { background:var(--black); color:white; }
+        .badge {
+            position:absolute; top:-5px; right:-5px; min-width:19px; height:19px;
+            background:var(--red); color:white; font-size:10px; font-weight:700;
+            border-radius:10px; display:flex; align-items:center; justify-content:center;
+            padding:0 5px; transition:transform 0.3s var(--ease-spring);
+        }
+        .badge.bump { transform:scale(1.4); }
+
+        /* ===== HERO ===== */
+        .hero-banner {
+            height:180px; margin:8px 20px 0; border-radius:var(--radius);
+            background:linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 55%, #1f2e1a 100%);
+            display:flex; align-items:flex-end; padding:24px; overflow:hidden; position:relative;
+        }
+        .hero-banner h2 { font-size:32px; line-height:0.9; color:white; z-index:2; font-weight:900; letter-spacing:-1px; }
+        .hero-sub { color:rgba(255,255,255,0.5); font-size:11px; z-index:2; position:absolute; top:20px; right:24px; letter-spacing:2px; text-transform:uppercase; }
+        .liquid-bg {
+            position:absolute; right:-15%; top:-25%; width:180px; height:180px; background:var(--green);
+            filter:blur(50px); border-radius:40% 60% 70% 30% / 40% 50% 60% 50%; animation:flow 8s infinite linear;
+        }
+        .liquid-bg-2 {
+            position:absolute; left:5%; bottom:-35%; width:140px; height:140px;
+            background:rgba(167,201,87,0.45); filter:blur(45px);
+            border-radius:60% 40% 30% 70% / 60% 30% 70% 40%; animation:flow 10s infinite linear reverse;
+        }
+        @keyframes flow {
+            from { transform:rotate(0deg) scale(1); }
+            50% { transform:rotate(180deg) scale(1.18); }
+            to { transform:rotate(360deg) scale(1); }
+        }
+
+        /* ===== CATEGORY TABS ===== */
+        .category-tabs {
+            display:flex; gap:8px; padding:16px 20px; overflow-x:auto;
+            scrollbar-width:none; -ms-overflow-style:none;
+        }
+        .category-tabs::-webkit-scrollbar { display:none; }
+        .cat-chip {
+            padding:9px 20px; border-radius:22px; border:1px solid var(--border);
+            background:white; font-size:13px; white-space:nowrap; cursor:pointer;
+            transition:all 0.3s ease; font-weight:500; flex-shrink:0;
+            display:flex; align-items:center; gap:6px;
+        }
+        .cat-chip .chip-dot { width:6px; height:6px; border-radius:50%; background:var(--border); transition:all 0.3s; }
+        .cat-chip.active { background:var(--black); color:white; border-color:var(--black); }
+        .cat-chip.active .chip-dot { background:var(--green); }
+        .cat-chip:active { transform:scale(0.95); }
+
+        /* ===== PRODUCT GRID ===== */
+        .section-pad { padding:0 20px; }
+        .product-grid {
+            display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:0 20px 120px;
+        }
+        .card { cursor:pointer; transition:all 0.3s ease; }
+        .card:active { transform:scale(0.96); }
+        .card-image {
+            width:100%; aspect-ratio:1; border-radius:var(--radius-sm); margin-bottom:10px;
+            position:relative; overflow:hidden; background:var(--gray-light);
+        }
+        .card-image img { width:100%; height:100%; object-fit:cover; object-position:center 25%; display:block; }
+        .card-image .card-overlay {
+            position:absolute; inset:0;
+            background:linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.35) 100%);
+        }
+        .purity-tag {
+            position:absolute; top:8px; right:8px; background:rgba(26,26,26,0.85); color:white;
+            padding:4px 10px; border-radius:5px; font-size:9px;
+            font-family:'SF Mono','Consolas',monospace; font-weight:600; letter-spacing:0.5px;
+            backdrop-filter:blur(6px); z-index:2;
+        }
+        .card-info h3 { font-size:14px; font-weight:700; margin-bottom:2px; line-height:1.3; }
+        .card-info .desc { font-size:11px; color:var(--gray); margin-bottom:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .price-row { display:flex; justify-content:space-between; align-items:center; }
+        .price { font-weight:800; font-size:15px; }
+        .add-dot {
+            width:28px; height:28px; background:var(--black); color:white; border:none;
+            border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
+            transition:all 0.25s ease; flex-shrink:0;
+        }
+        .add-dot:active { background:var(--green); color:var(--black); transform:scale(0.88); }
+        .add-dot.in-cart { background:var(--green); color:var(--black); }
+
+        /* ===== DETAIL PAGE ===== */
+        .detail-hero {
+            width:100%; aspect-ratio:4/3; position:relative; overflow:hidden; background:var(--gray-light);
+        }
+        .detail-hero img { width:100%; height:100%; object-fit:cover; object-position:center 25%; display:block; }
+        .detail-hero .hero-overlay {
+            position:absolute; inset:0;
+            background:linear-gradient(180deg, rgba(0,0,0,0.35) 0%, transparent 40%, rgba(0,0,0,0.15) 100%);
+        }
+        .detail-back-btn {
+            position:absolute; top:16px; left:16px; width:36px; height:36px;
+            border-radius:50%; background:rgba(255,255,255,0.92); border:none;
+            cursor:pointer; display:flex; align-items:center; justify-content:center;
+            backdrop-filter:blur(10px); z-index:5; color:var(--black); transition:all 0.2s;
+        }
+        .detail-back-btn:active { background:white; transform:scale(0.92); }
+        .detail-content { padding:20px; }
+        .detail-content h2 { font-size:24px; font-weight:900; margin-bottom:4px; }
+        .detail-sub { font-size:13px; color:var(--gray); margin-bottom:16px; }
+        .detail-meta { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+        .meta-chip {
+            padding:7px 16px; border-radius:20px; background:var(--gray-light);
+            font-size:12px; font-weight:600; display:flex; align-items:center; gap:5px;
+        }
+        .detail-desc { font-size:14px; line-height:1.8; color:#555; margin-bottom:20px; }
+        .nutrition-row { display:flex; gap:12px; margin-bottom:20px; }
+        .nutrition-item { flex:1; text-align:center; padding:14px 6px; background:var(--gray-light); border-radius:var(--radius-sm); }
+        .nutrition-item .val { font-size:18px; font-weight:800; }
+        .nutrition-item .lbl { font-size:10px; color:var(--gray); margin-top:3px; }
+        .detail-actions { display:flex; gap:12px; align-items:center; }
+        .qty-ctrl { display:flex; align-items:center; border:1px solid var(--border); border-radius:28px; overflow:hidden; }
+        .qty-ctrl button { width:40px; height:40px; border:none; background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--black); transition:all 0.2s; }
+        .qty-ctrl button:active { background:#eee; }
+        .qty-ctrl .qty-val { width:36px; text-align:center; font-weight:700; font-size:16px; }
+        .btn-primary {
+            flex:1; height:46px; border-radius:28px; border:none; background:var(--black); color:white;
+            font-size:15px; font-weight:700; cursor:pointer; transition:all 0.25s ease;
+            display:flex; align-items:center; justify-content:center; gap:8px;
+        }
+        .btn-primary:active { background:var(--green); color:var(--black); transform:scale(0.97); }
+        .btn-outline {
+            flex:1; height:46px; border-radius:28px; border:1px solid var(--border);
+            background:white; color:var(--black); font-size:15px; font-weight:600;
+            cursor:pointer; transition:all 0.2s;
+            display:flex; align-items:center; justify-content:center; gap:8px;
+        }
+        .btn-outline:active { background:var(--gray-light); }
+        .btn-customize {
+            width:100%; height:46px; border-radius:28px; border:1px dashed var(--border);
+            background:transparent; color:var(--black); font-size:14px; font-weight:600;
+            cursor:pointer; margin-top:12px; transition:all 0.2s; display:flex;
+            align-items:center; justify-content:center; gap:8px;
+        }
+        .btn-customize:active { background:var(--gray-light); border-color:var(--black); }
+
+        /* ===== CUSTOMIZE PAGE ===== */
+        .customize-page { padding:20px 20px 120px; }
+        .customize-page h3 { font-size:18px; font-weight:800; margin-bottom:4px; }
+        .customize-page .customize-sub { font-size:12px; color:var(--gray); margin-bottom:24px; }
+        .option-group { margin-bottom:28px; }
+        .option-group .og-label { font-size:13px; font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+        .option-row { display:flex; gap:8px; flex-wrap:wrap; }
+        .opt-chip {
+            padding:10px 20px; border-radius:22px; border:1px solid var(--border);
+            background:white; font-size:13px; cursor:pointer; transition:all 0.25s ease;
+            font-weight:500;
+        }
+        .opt-chip.active { background:var(--black); color:white; border-color:var(--black); }
+        .opt-chip:active { transform:scale(0.94); }
+        .customize-footer {
+            position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+            width:100%; max-width:480px; padding:16px 20px env(safe-area-inset-bottom,20px);
+            background:rgba(252,252,252,0.95); backdrop-filter:blur(16px);
+            border-top:1px solid var(--border); z-index:30; display:flex; gap:10px; align-items:center;
+        }
+        .customize-footer .price-lg { font-size:22px; font-weight:900; white-space:nowrap; }
+
+        /* ===== CART ===== */
+        .cart-page { padding:0 20px 130px; }
+        .cart-page h2 { font-size:24px; font-weight:900; padding:8px 0 16px; display:flex; align-items:center; gap:10px; }
+        .cart-item { display:flex; gap:14px; padding:16px 0; border-bottom:1px solid var(--border); align-items:center; }
+        .cart-item-img { width:68px; height:68px; border-radius:var(--radius-sm); overflow:hidden; flex-shrink:0; background:var(--gray-light); }
+        .cart-item-img img { width:100%; height:100%; object-fit:cover; object-position:center 25%; display:block; }
+        .cart-item-info { flex:1; min-width:0; }
+        .cart-item-info h4 { font-size:14px; font-weight:700; margin-bottom:2px; }
+        .cart-item-info .cart-item-desc { font-size:11px; color:var(--gray); margin-bottom:2px; }
+        .cart-item-info .cart-opts { font-size:10px; color:var(--green-deep); margin-bottom:4px; }
+        .cart-item-info .cart-item-price { font-weight:800; font-size:15px; }
+        .cart-item-actions { display:flex; align-items:center; gap:6px; }
+        .cart-qty-ctrl { display:flex; align-items:center; border:1px solid var(--border); border-radius:20px; }
+        .cart-qty-ctrl button { width:30px; height:30px; border:none; background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--black); }
+        .cart-qty-ctrl span { width:24px; text-align:center; font-size:13px; font-weight:700; }
+        .cart-remove-btn { width:30px; height:30px; border:none; background:transparent; color:var(--gray); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+        .cart-remove-btn:active { color:var(--red); }
+        .empty-state { text-align:center; padding:80px 0; color:var(--gray); }
+        .empty-state .empty-visual { margin-bottom:20px; display:flex; justify-content:center; }
+        .empty-state p { font-size:14px; }
+        .empty-btn {
+            display:inline-flex; align-items:center; gap:6px; margin-top:16px; padding:10px 28px; border-radius:24px;
+            background:var(--black); color:white; font-weight:700; font-size:14px; cursor:pointer;
+            border:none; transition:all 0.2s;
+        }
+        .empty-btn:active { background:var(--green); color:var(--black); }
+        .cart-summary { margin-top:20px; padding:20px; background:var(--gray-light); border-radius:var(--radius-sm); }
+        .cart-summary .row { display:flex; justify-content:space-between; margin-bottom:8px; font-size:14px; }
+        .cart-summary .row.total { font-weight:800; font-size:18px; border-top:1px solid var(--border); padding-top:12px; margin-top:8px; }
+        .cart-summary .row.kcal { font-size:12px; color:var(--gray); }
+        .checkout-btn {
+            width:100%; height:48px; border-radius:28px; border:none; background:var(--black);
+            color:white; font-size:16px; font-weight:700; cursor:pointer; margin-top:16px;
+            transition:all 0.25s ease; display:flex; align-items:center; justify-content:center; gap:8px;
+        }
+        .checkout-btn:active { background:var(--green); color:var(--black); transform:scale(0.97); }
+
+        /* ===== CHECKOUT ===== */
+        .checkout-page { padding:0 20px 120px; }
+        .checkout-page h2 { font-size:24px; font-weight:900; padding:8px 0 16px; display:flex; align-items:center; gap:10px; }
+        .checkout-steps { display:flex; gap:0; margin-bottom:24px; align-items:center; }
+        .checkout-step {
+            flex:1; text-align:center; position:relative; padding:12px 0;
+            font-size:11px; color:var(--gray); font-weight:600;
+        }
+        .checkout-step .step-num {
+            width:28px; height:28px; border-radius:50%; background:var(--gray-light);
+            display:flex; align-items:center; justify-content:center; margin:0 auto 6px;
+            font-size:13px; font-weight:800; transition:all 0.3s;
+        }
+        .checkout-step.active .step-num { background:var(--black); color:white; }
+        .checkout-step.done .step-num { background:var(--green); color:var(--black); }
+        .checkout-step::after {
+            content:''; position:absolute; top:26px; left:60%; width:80%; height:1px;
+            background:var(--border); z-index:-1;
+        }
+        .checkout-step:last-child::after { display:none; }
+        .checkout-section { margin-bottom:24px; }
+        .checkout-section h4 { font-size:14px; font-weight:700; margin-bottom:10px; }
+        .checkout-card {
+            border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px;
+            transition:all 0.2s; cursor:pointer;
+        }
+        .checkout-card:active { background:var(--gray-light); }
+        .checkout-card.selected { border-color:var(--black); border-width:2px; }
+        .checkout-card .cc-row { display:flex; justify-content:space-between; align-items:center; }
+        .checkout-card .cc-title { font-weight:700; font-size:14px; }
+        .checkout-card .cc-desc { font-size:12px; color:var(--gray); margin-top:2px; }
+        .radio-custom {
+            width:20px; height:20px; border-radius:50%; border:2px solid var(--border);
+            display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s;
+        }
+        .radio-custom.checked { border-color:var(--black); }
+        .radio-custom.checked::after { content:''; width:10px; height:10px; border-radius:50%; background:var(--black); }
+        .checkout-total-bar {
+            position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+            width:100%; max-width:480px; padding:16px 20px env(safe-area-inset-bottom,20px);
+            background:rgba(252,252,252,0.95); backdrop-filter:blur(16px);
+            border-top:1px solid var(--border); z-index:30;
+            display:flex; gap:16px; align-items:center;
+        }
+        .checkout-total-bar .total-info { flex:1; }
+        .checkout-total-bar .total-price { font-size:22px; font-weight:900; }
+        .checkout-total-bar .total-count { font-size:11px; color:var(--gray); }
+
+        /* ===== SUCCESS ===== */
+        .success-page { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; padding:40px 20px; text-align:center; }
+        .success-icon-wrap { margin-bottom:20px; }
+        .success-page h2 { font-size:24px; font-weight:900; margin-bottom:8px; }
+        .success-page .order-ref { font-family:'SF Mono','Consolas',monospace; font-size:14px; color:var(--gray); margin-bottom:24px; }
+        .success-details {
+            background:var(--gray-light); border-radius:var(--radius-sm); padding:20px; width:100%;
+            text-align:left; margin-bottom:24px;
+        }
+        .success-details .sd-row { display:flex; justify-content:space-between; padding:6px 0; font-size:13px; }
+        .success-details .sd-row strong { font-size:15px; }
+        .success-actions { display:flex; gap:10px; width:100%; }
+        .particles {
+            position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:100;
+        }
+        .particle {
+            position:absolute; width:8px; height:8px; border-radius:50%;
+            animation:particleFall 1.2s var(--ease-out) forwards;
+        }
+        @keyframes particleFall {
+            0% { transform:translateY(0) scale(1); opacity:1; }
+            100% { transform:translateY(120px) scale(0); opacity:0; }
+        }
+
+        /* ===== ORDERS ===== */
+        .orders-page { padding:0 20px 120px; }
+        .orders-page h2 { font-size:24px; font-weight:900; padding:8px 0 16px; display:flex; align-items:center; gap:10px; }
+        .order-card {
+            border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px;
+            margin-bottom:14px; cursor:pointer; transition:all 0.2s;
+        }
+        .order-card:active { background:var(--gray-light); }
+        .order-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+        .order-id { font-size:12px; color:var(--gray); font-family:'SF Mono','Consolas',monospace; display:flex; align-items:center; gap:6px; }
+        .order-status {
+            padding:5px 14px; border-radius:14px; font-size:11px; font-weight:700; display:flex; align-items:center; gap:4px;
+        }
+        .order-status.preparing { background:#fff6e5; color:#b45309; }
+        .order-status.ready { background:#e8f5e9; color:#2e7d32; }
+        .order-status.delivered { background:#f0f0f0; color:#555; }
+        .status-dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
+        .order-status.preparing .status-dot { background:#f4a261; animation:dotPulse 1.5s infinite; }
+        .order-status.ready .status-dot { background:#66bb6a; }
+        .order-status.delivered .status-dot { background:#aaa; }
+        @keyframes dotPulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+        .order-items { font-size:13px; color:#555; margin-bottom:8px; }
+        .order-total { font-weight:800; font-size:15px; }
+        .order-time { font-size:11px; color:var(--gray); margin-top:6px; display:flex; align-items:center; gap:4px; }
+
+        /* ===== ORDER DETAIL ===== */
+        .order-detail-page { padding:0 20px 120px; }
+        .order-detail-page h2 { font-size:20px; font-weight:900; padding:8px 0 16px; }
+        .od-status-bar {
+            display:flex; align-items:center; gap:0; padding:20px 0; margin-bottom:20px;
+        }
+        .od-step {
+            flex:1; text-align:center; position:relative;
+        }
+        .od-step .od-dot {
+            width:12px; height:12px; border-radius:50%; margin:0 auto 6px;
+            background:var(--border); transition:all 0.3s;
+        }
+        .od-step.done .od-dot { background:var(--green); }
+        .od-step.current .od-dot { background:var(--black); animation:dotPulse 1.5s infinite; }
+        .od-step .od-label { font-size:10px; color:var(--gray); }
+        .od-step::after {
+            content:''; position:absolute; top:6px; left:55%; width:90%; height:1px;
+            background:var(--border); z-index:-1;
+        }
+        .od-step:last-child::after { display:none; }
+        .od-step.done::after { background:var(--green); }
+        .od-items-list { margin-bottom:24px; }
+        .od-item {
+            display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); align-items:center;
+        }
+        .od-item-img { width:48px; height:48px; border-radius:8px; overflow:hidden; background:var(--gray-light); flex-shrink:0; }
+        .od-item-img img { width:100%; height:100%; object-fit:cover; }
+        .od-item-info { flex:1; }
+        .od-item-info .od-item-name { font-size:14px; font-weight:700; }
+        .od-item-info .od-item-opts { font-size:11px; color:var(--gray); }
+        .od-item-price { font-weight:700; font-size:14px; }
+
+        /* ===== LAB ===== */
+        .lab-page { padding:0 20px 120px; }
+        .lab-page h2 { font-size:24px; font-weight:900; padding:8px 0 16px; display:flex; align-items:center; gap:10px; }
+        .lab-card {
+            background:var(--gray-light); border-radius:var(--radius-sm); padding:20px;
+            margin-bottom:16px; cursor:pointer; transition:all 0.2s;
+        }
+        .lab-card:active { transform:scale(0.98); }
+        .lab-card h3 { font-size:16px; font-weight:800; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+        .lab-card p { font-size:13px; color:#666; line-height:1.8; }
+        .lab-stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; }
+        .lab-stat { text-align:center; padding:22px 14px; background:white; border-radius:var(--radius-sm); border:1px solid var(--border); }
+        .lab-stat .num { font-size:30px; font-weight:900; letter-spacing:-1px; }
+        .lab-stat .lbl { font-size:11px; color:var(--gray); margin-top:4px; }
+
+        /* ===== LAB DETAIL ===== */
+        .lab-detail-page { padding:0 20px 120px; }
+        .lab-detail-page h2 { font-size:20px; font-weight:900; padding:8px 0 8px; }
+        .lab-detail-page .lab-detail-img {
+            width:100%; aspect-ratio:16/9; border-radius:var(--radius-sm); background:var(--gray-light);
+            margin-bottom:20px; display:flex; align-items:center; justify-content:center;
+            font-size:64px;
+        }
+        .lab-detail-page p { font-size:14px; line-height:1.9; color:#444; }
+
+        /* ===== BOTTOM NAV ===== */
+        .bottom-nav {
+            position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+            width:100%; max-width:480px; background:rgba(252,252,252,0.94);
+            backdrop-filter:blur(16px); border-top:1px solid var(--border);
+            display:none; justify-content:space-around; padding:6px 0 env(safe-area-inset-bottom,8px); z-index:50;
+        }
+        .bottom-nav.show { display:flex; }
+        .nav-tab {
+            display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 14px;
+            cursor:pointer; border:none; background:transparent; color:var(--gray);
+            font-size:10px; font-weight:500; transition:all 0.2s; position:relative;
+        }
+        .nav-tab .nav-ic-wrap { width:24px; height:24px; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+        .nav-tab.active { color:var(--black); font-weight:700; }
+        .nav-tab.active .nav-ic-wrap { transform:scale(1.08); }
+        .nav-tab .nav-badge {
+            position:absolute; top:0; right:4px; min-width:17px; height:17px;
+            background:var(--red); color:white; font-size:9px; font-weight:700;
+            border-radius:9px; display:flex; align-items:center; justify-content:center; padding:0 4px;
+        }
+
+        /* ===== TOAST ===== */
+        .toast {
+            position:fixed; top:52px; left:50%; transform:translateX(-50%) translateY(-24px);
+            background:var(--black); color:white; padding:10px 24px; border-radius:24px;
+            font-size:13px; font-weight:600; z-index:200; opacity:0; pointer-events:none;
+            transition:all 0.35s var(--ease); display:flex; align-items:center; gap:8px; white-space:nowrap;
+        }
+        .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+        .toast-dot { width:7px; height:7px; border-radius:50%; background:var(--green); flex-shrink:0; }
+
+        /* ===== RIPPLE ===== */
+        .ripple {
+            position:absolute; border-radius:50%; background:rgba(0,0,0,0.1);
+            transform:scale(0); animation:rippleAnim 0.6s ease-out; pointer-events:none;
+        }
+        @keyframes rippleAnim { to { transform:scale(4); opacity:0; } }
+
+        /* ===== RESPONSIVE ===== */
+        @media (min-width:481px) {
+            body { border-left:1px solid var(--border); border-right:1px solid var(--border); }
+        }
+    </style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="ic-cup" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="15" rx="3"/><path d="M8 3V2a1 1 0 011-1h6a1 1 0 011 1v1"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="14" y2="12"/><path d="M19 7h-1a2 2 0 010 4h1"/></symbol>
+    <symbol id="ic-bag" viewBox="0 0 24 24"><path d="M6 2L3 8v12a2 2 0 002 2h14a2 2 0 002-2V8l-3-6z"/><line x1="3" y1="8" x2="21" y2="8"/><path d="M16 10a4 4 0 01-8 0"/></symbol>
+    <symbol id="ic-clipboard" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/></symbol>
+    <symbol id="ic-flask" viewBox="0 0 24 24"><path d="M9 2h6"/><line x1="10" y1="2" x2="10" y2="9"/><path d="M10 9L3 20a2.5 2.5 0 002.5 2.5h13A2.5 2.5 0 0021 20l-7-11V2"/></symbol>
+    <symbol id="ic-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="ic-minus" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="ic-arrow-left" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="10 5 5 12 10 19"/></symbol>
+    <symbol id="ic-arrow-right" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="14 5 19 12 14 19"/></symbol>
+    <symbol id="ic-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="ic-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="ic-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><line x1="10" y1="10" x2="10" y2="17"/><line x1="14" y1="10" x2="14" y2="17"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></symbol>
+    <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 16"/></symbol>
+    <symbol id="ic-pin" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+    <symbol id="ic-droplet" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></symbol>
+    <symbol id="ic-leaf" viewBox="0 0 24 24"><path d="M11 21c-5-1-8-5.5-8-11C3 5 8 2 12 2c4 0 9 3 9 8 0 5.5-3 10-8 11"/><path d="M12 2v19"/><path d="M12 8c-1.5-1.5-4-2-6 0"/></symbol>
+    <symbol id="ic-sparkle" viewBox="0 0 24 24"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></symbol>
+    <symbol id="ic-sliders" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="10" r="2"/><circle cx="20" cy="14" r="2"/></symbol>
+    <symbol id="ic-credit-card" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></symbol>
+    <symbol id="ic-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="ic-phone" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></symbol>
+    <symbol id="ic-success" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="none" stroke="currentColor" stroke-width="2.5"/><polyline points="20 32 28 40 44 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="ic-empty-cart" viewBox="0 0 80 80"><circle cx="40" cy="40" r="38" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.3"/><path d="M22 28l8 32h20l8-32z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><line x1="22" y1="28" x2="58" y2="28" stroke="currentColor" stroke-width="2"/><path d="M34 40a6 6 0 0112 0" fill="none" stroke="currentColor" stroke-width="2"/><line x1="40" y1="16" x2="40" y2="26" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="40" y1="54" x2="40" y2="64" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="24" y1="40" x2="14" y2="40" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="56" y1="40" x2="66" y2="40" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="ic-wechat" viewBox="0 0 1024 1024"><path d="M342.745666 345.269651c-17.134239 0-34.283828 11.347442-34.299177 28.497031 0 17.149589 17.149589 28.498054 34.299177 28.498054 17.149589 0 28.497031-11.604292 28.497031-28.498054C371.243721 356.617094 359.896278 345.269651 342.745666 345.269651zM502.12663 402.264737c17.150612 0 28.499078-11.347442 28.499078-28.465309 0-17.181311-11.33107-28.528754-28.499078-28.528754-16.892739 0-34.043351 11.347442-34.282804 28.497031C467.843826 390.916271 484.977042 402.264737 502.12663 402.264737zM576.274374 510.708588c-11.347442 0-22.696931 11.347442-22.696931 22.694885 0 11.348466 11.349489 22.695908 22.696931 22.695908 17.149589 0 28.497031-11.347442 28.497031-22.695908C604.771405 522.057053 593.423963 510.708588 576.274374 510.708588zM847.240739 34.650171 174.452729 34.650171c-77.110215 0-139.601478 62.492286-139.601478 139.570779l0 672.736844c0 77.077469 62.492286 139.569756 139.601478 139.569756l672.78801 0c77.093842 0 139.570779-62.491263 139.570779-139.569756L986.811518 174.22095C986.811518 97.142457 924.334581 34.650171 847.240739 34.650171zM416.874991 635.790374c-28.240181 0-51.17759-5.802146-79.690994-11.316743l-79.68997 40.069601 22.693862-68.598354c-56.978712-39.845497-91.037413-91.328032-91.02104-153.835667 0.016373-108.444874 102.642728-193.680141 227.738841-193.680141 111.973234 0 210.064296 68.1174 229.731218 159.925363-7.308453-0.769526-14.617929-1.282203-21.942755-1.282203-108.190071 0-193.682187 80.683601-193.69856 180.056865 0 16.381086 2.532683 32.537044 7.067976 47.666626C430.995593 635.533524 423.942967 635.790374 416.874991 635.790374zM752.821299 715.737194l17.133216 56.994062-62.539358-34.299177c-22.695908 5.545296-45.647643 11.347442-68.343551 11.347442-108.445898 0-193.699584-73.887824-193.699584-165.18311 0-91.037413 85.254709-165.182087 193.699584-165.182087 102.386902 0 193.425338 74.144674 193.425338 165.214832C832.49592 635.790374 798.453592 681.436994 752.821299 715.737194zM701.611987 510.708588c-11.347442 0-22.695908 11.347442-22.695908 22.694885 0 11.348466 11.348466 22.695908 22.695908 22.695908 16.893762 0 28.497031-11.347442 28.497031-22.695908C730.107995 522.057053 718.762599 510.708588 701.611987 510.708588z" fill="#272636"/></symbol>
+    <symbol id="ic-alipay" viewBox="0 0 1024 1024"><path d="M998.912 694.23616 998.912 215.06048c0-103.296-83.82464-187.12064-187.18208-187.12064L212.72064 27.93984C109.42976 27.93984 25.6 111.76448 25.6 215.06048l0 599.00928c0 103.29088 83.7632 187.11552 187.12064 187.11552l599.00928 0c92.03712 0 168.6272-66.54976 184.25856-154.08128-49.6384-21.4784-264.73984-114.37056-376.79616-167.84384-85.27872 103.30112-174.58688 165.28896-309.20704 165.28896s-224.47104-82.9184-213.70368-184.38656c7.1168-66.6112 52.80256-175.49824 251.23328-156.8256 104.57088 9.79456 152.448 29.32736 237.73696 57.48736 22.07744-40.44288 40.38144-84.98176 54.31296-132.36736L261.38624 428.45696l0-37.47328 187.11552 0L448.50176 323.70176 220.2624 323.70176l0-41.2416 228.23936 0L448.50176 185.37472c0 0 2.06848-15.21152 18.86208-15.21152l93.55776 0 0 112.29696 243.31776 0 0 41.2416-243.31776 0 0 67.28192 198.49728 0c-18.2528 74.27584-45.93152 142.52544-80.60416 202.14272C736.48128 613.9904 998.912 694.23616 998.912 694.23616L998.912 694.23616 998.912 694.23616 998.912 694.23616zM295.08608 780.30336c-142.22336 0-164.73088-89.7792-157.18912-127.31904 7.48032-37.3504 48.6656-86.07232 127.74912-86.07232 90.88 0 172.27264 23.23456 269.96736 70.79936C466.9952 727.08096 382.68416 780.30336 295.08608 780.30336L295.08608 780.30336 295.08608 780.30336z" fill="#262536"/></symbol>
+    <symbol id="ic-store" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M3 9v12h18V9"/><path d="M5 9V5a1 1 0 011-1h12a1 1 0 011 1v4"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="10" y1="17" x2="14" y2="17"/></symbol>
+    <symbol id="ic-delivery" viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="11" rx="2"/><path d="M16 9h3l3 4v4h-2"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="ic-empty-orders" viewBox="0 0 80 80"><circle cx="40" cy="40" r="38" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.3"/><rect x="20" y="14" width="40" height="52" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><line x1="26" y1="28" x2="54" y2="28" stroke="currentColor" stroke-width="2"/><line x1="26" y1="36" x2="48" y2="36" stroke="currentColor" stroke-width="2"/><line x1="26" y1="44" x2="42" y2="44" stroke="currentColor" stroke-width="2"/><circle cx="56" cy="56" r="10" fill="none" stroke="currentColor" stroke-width="2"/><line x1="56" y1="52" x2="56" y2="60" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="52" y1="56" x2="60" y2="56" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+
+<div id="app">
+    <!-- ===== SPLASH SCREEN ===== -->
+    <div class="screen splash-screen active" id="screen-splash" onclick="app.go('login')">
+        <div class="splash-blob"></div>
+        <div class="splash-content">
+            <div class="splash-logo">MATTER & ORDER</div>
+            <div class="splash-sub">质 序 点 单</div>
+        </div>
+        <div class="splash-hint">轻触任意位置进入</div>
+    </div>
+
+    <!-- ===== LOGIN SCREEN ===== -->
+    <div class="screen login-screen" id="screen-login">
+        <div class="login-header">
+            <h1>欢迎回来</h1>
+            <p>登录你的实验室账户</p>
+        </div>
+        <div class="login-form">
+            <div class="input-group">
+                <label>手机号码</label>
+                <div class="input-row">
+                    <div class="input-field" style="width:80px;flex:none;text-align:center;color:#555;">+86</div>
+                    <input class="input-field" id="phone-input" type="tel" placeholder="请输入手机号" maxlength="11">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>验证码</label>
+                <div class="input-row">
+                    <input class="input-field" id="code-input" type="text" placeholder="6 位验证码" maxlength="6">
+                    <button class="btn-sms" id="sms-btn" onclick="app.sendCode()">获取验证码</button>
+                </div>
+            </div>
+            <button class="login-btn" onclick="app.login()">
+                <svg class="ic ic-sm"><use href="#ic-arrow-right"/></svg>
+                进入实验室
+            </button>
+            <div class="login-skip" onclick="app.go('menu')">跳过登录，先逛逛</div>
+        </div>
+    </div>
+
+    <!-- ===== MAIN APP SHELL ===== -->
+    <div class="screen" id="screen-app">
+        <!-- Header -->
+        <div class="app-header" id="app-header">
+            <div class="header-left">
+                <button class="back-btn" id="back-btn" onclick="app.back()">
+                    <svg class="ic"><use href="#ic-arrow-left"/></svg>
+                </button>
+                <div class="logo-group">
+                    <div class="logo">Matter & Order</div>
+                    <div class="subtitle">
+                        <svg class="ic ic-sm" style="color:var(--gray)"><use href="#ic-pin"/></svg>
+                        第 001 号实验室 · 广州
+                    </div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" onclick="app.go('orders')">
+                    <svg class="ic"><use href="#ic-clipboard"/></svg>
+                </button>
+                <button class="icon-btn" onclick="app.go('cart')">
+                    <svg class="ic"><use href="#ic-bag"/></svg>
+                    <span class="badge" id="header-badge" style="display:none">0</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Page Container -->
+        <div id="page-container"></div>
+
+        <!-- Bottom Nav -->
+        <nav class="bottom-nav show" id="bottom-nav">
+            <button class="nav-tab active" data-tab="menu" onclick="app.go('menu')">
+                <span class="nav-ic-wrap"><svg class="ic"><use href="#ic-cup"/></svg></span>菜单
+            </button>
+            <button class="nav-tab" data-tab="cart" onclick="app.go('cart')">
+                <span class="nav-ic-wrap"><svg class="ic"><use href="#ic-bag"/></svg></span>购物车
+                <span class="nav-badge" id="nav-cart-badge" style="display:none">0</span>
+            </button>
+            <button class="nav-tab" data-tab="orders" onclick="app.go('orders')">
+                <span class="nav-ic-wrap"><svg class="ic"><use href="#ic-clipboard"/></svg></span>订单
+            </button>
+            <button class="nav-tab" data-tab="lab" onclick="app.go('lab')">
+                <span class="nav-ic-wrap"><svg class="ic"><use href="#ic-flask"/></svg></span>实验室
+            </button>
+        </nav>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><span class="toast-dot"></span><span id="toast-msg"></span></div>
+<!-- Particles Container -->
+<div class="particles" id="particles"></div>
+
+<script>
+// ===== APP CONTROLLER =====
+const app = {
+    stack: ['menu'],
+    loggedIn: false,
+    phoneTimer: null,
+
+    init() {
+        // Auto-advance splash after 2.5s
+        setTimeout(() => {
+            const splash = document.getElementById('screen-splash');
+            if (splash.classList.contains('active')) this.go('login');
+        }, 2500);
+    },
+
+    go(page, params) {
+        // Handle splash/login as special screens outside app shell
+        if (page === 'splash' || page === 'login') {
+            this.stack = [page];
+            this.switchScreen(page);
+            return;
+        }
+
+        // Ensure app shell is visible
+        const appShell = document.getElementById('screen-app');
+        if (!appShell.classList.contains('active')) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            appShell.classList.add('active');
+            document.getElementById('bottom-nav').classList.add('show');
+        }
+
+        // Update stack
+        const rootPages = ['menu', 'cart', 'orders', 'lab'];
+        if (rootPages.includes(page)) {
+            this.stack = [page];
+        } else {
+            this.stack.push(page);
+        }
+
+        this.render(page, params);
+        this.updateNav(page);
+        this.updateBackBtn();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    back() {
+        if (this.stack.length <= 1) {
+            this.go('menu');
+            return;
+        }
+        this.stack.pop();
+        const prev = this.stack[this.stack.length - 1];
+        this.render(prev, null, true);
+        this.updateNav(prev);
+        this.updateBackBtn();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    switchScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById('screen-' + id).classList.add('active');
+        if (id !== 'app') {
+            document.getElementById('bottom-nav').classList.remove('show');
+        }
+    },
+
+    updateNav(page) {
+        const rootPages = ['menu', 'cart', 'orders', 'lab'];
+        document.querySelectorAll('.nav-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === page);
+        });
+        // Show/hide bottom nav
+        const bn = document.getElementById('bottom-nav');
+        if (rootPages.includes(page)) {
+            bn.classList.add('show');
+        } else {
+            bn.classList.remove('show');
+        }
+        this.updateBadges();
+    },
+
+    updateBackBtn() {
+        const btn = document.getElementById('back-btn');
+        const rootPages = ['menu', 'cart', 'orders', 'lab'];
+        const current = this.stack[this.stack.length - 1];
+        if (rootPages.includes(current) && this.stack.length === 1) {
+            btn.classList.remove('show');
+        } else {
+            btn.classList.add('show');
+        }
+    },
+
+    // ===== RENDER ENGINE =====
+    render(page, params, isBack) {
+        const container = document.getElementById('page-container');
+        if (!container) return;
+        let html = '';
+
+        switch (page) {
+            case 'menu': html = this.renderMenu(); break;
+            case 'detail': html = this.renderDetail(params); break;
+            case 'customize': html = this.renderCustomize(params); break;
+            case 'cart': html = this.renderCart(); break;
+            case 'checkout': html = this.renderCheckout(); break;
+            case 'success': html = this.renderSuccess(params); break;
+            case 'orders': html = this.renderOrders(); break;
+            case 'order-detail': html = this.renderOrderDetail(params); break;
+            case 'lab': html = this.renderLab(); break;
+            case 'lab-detail': html = this.renderLabDetail(params); break;
+            default: html = this.renderMenu();
+        }
+
+        container.innerHTML = html;
+        if (!isBack) {
+            container.classList.remove('anim-back');
+            container.classList.add('anim-in');
+        } else {
+            container.classList.remove('anim-in');
+            container.classList.add('anim-back');
+        }
+        setTimeout(() => {
+            container.classList.remove('anim-in', 'anim-back');
+        }, 400);
+
+        this.updateBadges();
+    },
+
+    // ===== LOGIN =====
+    sendCode() {
+        const btn = document.getElementById('sms-btn');
+        if (btn.classList.contains('counting')) return;
+        btn.classList.add('counting');
+        btn.textContent = '60s 后重试';
+        let sec = 60;
+        this.phoneTimer = setInterval(() => {
+            sec--;
+            btn.textContent = sec + 's 后重试';
+            if (sec <= 0) {
+                clearInterval(this.phoneTimer);
+                btn.classList.remove('counting');
+                btn.textContent = '获取验证码';
+            }
+        }, 1000);
+        showToast('验证码已发送');
+    },
+
+    login() {
+        const phone = document.getElementById('phone-input')?.value || '';
+        if (phone.length < 11) { showToast('请输入正确的手机号'); return; }
+        this.loggedIn = true;
+        showToast('登录成功');
+        setTimeout(() => this.go('menu'), 400);
+    },
+
+    // ===== RENDER: MENU =====
+    renderMenu() {
+        const filtered = activeCat === 'all' ? products : products.filter(p => p.cat === activeCat);
+        const cards = filtered.map(p => {
+            const inCart = cart.find(c => c.id === p.id);
+            return `
+            <div class="card pop-in" onclick="app.go('detail', ${p.id})">
+                <div class="card-image">
+                    <img src="${p.img}" alt="${p.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                    <div class="img-fallback" style="display:none;">${p.name}</div>
+                    <div class="card-overlay"></div>
+                    <div class="purity-tag">${p.purity}</div>
+                </div>
+                <div class="card-info">
+                    <h3>${p.name}</h3>
+                    <p class="desc">${p.ingredients.split('/')[0].trim()}</p>
+                    <div class="price-row">
+                        <span class="price">¥${p.price}.00</span>
+                        <button class="add-dot ${inCart ? 'in-cart' : ''}" onclick="event.stopPropagation(); addToCart(${p.id})">
+                            ${inCart ? '<svg class="ic ic-sm" style="color:var(--black)"><use href="#ic-check"/></svg>' : '<svg class="ic ic-sm" style="color:white"><use href="#ic-plus"/></svg>'}
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        return `
+            <div class="hero-banner">
+                <div class="liquid-bg"></div><div class="liquid-bg-2"></div>
+                <span class="hero-sub">Lab Series</span>
+                <h2>SEASONAL<br>PURE 01.</h2>
+            </div>
+            <div class="category-tabs" id="category-tabs">
+                <div class="cat-chip ${activeCat==='all'?'active':''}" data-cat="all" onclick="setCat('all')"><span class="chip-dot"></span>全部</div>
+                <div class="cat-chip ${activeCat==='smoothie'?'active':''}" data-cat="smoothie" onclick="setCat('smoothie')"><span class="chip-dot"></span>果汁奶昔</div>
+                <div class="cat-chip ${activeCat==='tea'?'active':''}" data-cat="tea" onclick="setCat('tea')"><span class="chip-dot"></span>纯萃茗茶</div>
+                <div class="cat-chip ${activeCat==='material'?'active':''}" data-cat="material" onclick="setCat('material')"><span class="chip-dot"></span>物料中心</div>
+            </div>
+            <div class="product-grid">${cards}</div>`;
+    },
+
+    // ===== RENDER: DETAIL =====
+    renderDetail(id) {
+        if (!id) return this.renderMenu();
+        const p = findProduct(id);
+        if (!p) return this.renderMenu();
+        const inCart = cart.find(c => c.id === id);
+        const qty = inCart ? inCart.qty : 0;
+        return `
+            <div class="detail-hero">
+                <img src="${p.img}" alt="${p.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                <div class="img-fallback" style="display:none;width:100%;height:100%;align-items:center;justify-content:center;">${p.name}</div>
+                <div class="hero-overlay"></div>
+                <button class="detail-back-btn" onclick="app.back()">
+                    <svg class="ic"><use href="#ic-arrow-left"/></svg>
+                </button>
+            </div>
+            <div class="detail-content">
+                <h2>${p.name}</h2>
+                <p class="detail-sub">${p.ingredients}</p>
+                <div class="detail-meta">
+                    <span class="meta-chip"><svg class="ic ic-sm"><use href="#ic-droplet"/></svg>${p.purity}</span>
+                    <span class="meta-chip"><svg class="ic ic-sm"><use href="#ic-leaf"/></svg>${p.kcal} kcal</span>
+                    <span class="meta-chip">¥${p.price}.00</span>
+                </div>
+                <p class="detail-desc">${p.desc}</p>
+                <div class="nutrition-row">
+                    <div class="nutrition-item"><div class="val">${p.kcal}</div><div class="lbl">卡路里 / kcal</div></div>
+                    <div class="nutrition-item"><div class="val">¥${p.price}</div><div class="lbl">价格</div></div>
+                    <div class="nutrition-item"><div class="val">${p.purity.replace(/[^0-9]/g,'')}%</div><div class="lbl">纯度等级</div></div>
+                </div>
+                <div class="detail-actions">
+                    <div class="qty-ctrl">
+                        <button onclick="updateCartQty(${p.id},${qty-1})"><svg class="ic ic-sm"><use href="#ic-minus"/></svg></button>
+                        <span class="qty-val">${qty}</span>
+                        <button onclick="updateCartQty(${p.id},${qty+1})"><svg class="ic ic-sm"><use href="#ic-plus"/></svg></button>
+                    </div>
+                    <button class="btn-primary" onclick="addToCart(${p.id});app.render('detail',${p.id});">
+                        <svg class="ic ic-sm"><use href="#ic-bag"/></svg>
+                        ${qty>0?'更新购物车':'加入购物车'}
+                    </button>
+                </div>
+                <button class="btn-customize" onclick="app.go('customize',${p.id})">
+                    <svg class="ic ic-sm"><use href="#ic-sliders"/></svg>
+                    定制专属口味
+                </button>
+            </div>`;
+    },
+
+    // ===== RENDER: CUSTOMIZE (三级页面) =====
+    renderCustomize(id) {
+        if (!id) return this.renderMenu();
+        const p = findProduct(id);
+        if (!p) return this.renderMenu();
+        // Init customize state
+        if (!customizeState[id]) customizeState[id] = { size:'中杯', sugar:'半糖', ice:'正常冰', toppings:[] };
+        const cs = customizeState[id];
+        const addPrice = (cs.size==='大杯'?4:0) + cs.toppings.length * 3;
+        const total = p.price + addPrice;
+        const renderOpts = (key, opts) => opts.map(o =>
+            `<span class="opt-chip${cs[key]===o?' active':''}" onclick="setCustom('${id}','${key}','${o}')">${o}</span>`
+        ).join('');
+        const renderToppings = (opts) => opts.map(o => {
+            const sel = cs.toppings.includes(o);
+            return `<span class="opt-chip${sel?' active':''}" onclick="toggleTopping('${id}','${o}')">${o} ${sel?'✓':''}</span>`;
+        }).join('');
+
+        return `
+            <div class="customize-page">
+                <h3>定制 · ${p.name}</h3>
+                <p class="customize-sub">个性化调整你的饮品参数</p>
+                <div class="option-group">
+                    <div class="og-label"><svg class="ic ic-sm"><use href="#ic-cup"/></svg>杯型</div>
+                    <div class="option-row">${renderOpts('size',['中杯','大杯'])}</div>
+                </div>
+                <div class="option-group">
+                    <div class="og-label"><svg class="ic ic-sm"><use href="#ic-droplet"/></svg>甜度</div>
+                    <div class="option-row">${renderOpts('sugar',['无糖','微糖','半糖','全糖'])}</div>
+                </div>
+                <div class="option-group">
+                    <div class="og-label"><svg class="ic ic-sm"><use href="#ic-sparkle"/></svg>冰块</div>
+                    <div class="option-row">${renderOpts('ice',['去冰','少冰','正常冰','多冰'])}</div>
+                </div>
+                <div class="option-group">
+                    <div class="og-label"><svg class="ic ic-sm"><use href="#ic-plus"/></svg>小料 (+¥3/种)</div>
+                    <div class="option-row">${renderToppings(['脆波波','椰果','燕麦','芦荟','仙草','芝士奶盖'])}</div>
+                </div>
+            </div>
+            <div class="customize-footer">
+                <div class="price-lg">¥${total}.00</div>
+                <div style="flex:1;font-size:11px;color:var(--gray);">${cs.size} · ${cs.sugar} · ${cs.ice}${cs.toppings.length?' +'+cs.toppings.length+'种小料':''}</div>
+                <button class="btn-primary" style="flex:1;" onclick="addToCartWithCustom(${id});app.back();">确认加入</button>
+            </div>`;
+    },
+
+    // ===== RENDER: CART =====
+    renderCart() {
+        if (cart.length === 0) {
+            return `<div class="cart-page"><h2><svg class="ic ic-lg"><use href="#ic-bag"/></svg>购物车</h2>
+                <div class="empty-state"><div class="empty-visual"><svg class="ic-2xl" style="color:var(--border)"><use href="#ic-empty-cart"/></svg></div>
+                <p>购物车是空的</p><p style="font-size:12px;margin-top:4px;color:var(--gray);">去菜单页面挑选你喜欢的饮品吧</p>
+                <button class="empty-btn" onclick="app.go('menu')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><use href="#ic-cup"/></svg>浏览菜单</button></div></div>`;
+        }
+        const items = cart.map(item => `
+            <div class="cart-item">
+                <div class="cart-item-img"><img src="${item.img}" alt="${item.name}" loading="lazy"></div>
+                <div class="cart-item-info">
+                    <h4>${item.name}</h4>
+                    <p class="cart-item-desc">${item.desc}</p>
+                    ${item.custom ? `<p class="cart-opts">${item.custom}</p>` : ''}
+                    <p class="cart-item-price">¥${(item.price*item.qty).toFixed(2)}</p>
+                </div>
+                <div class="cart-item-actions">
+                    <div class="cart-qty-ctrl">
+                        <button onclick="updateCartQty(${item.id},${item.qty-1});app.render('cart');"><svg class="ic ic-sm"><use href="#ic-minus"/></svg></button>
+                        <span>${item.qty}</span>
+                        <button onclick="updateCartQty(${item.id},${item.qty+1});app.render('cart');"><svg class="ic ic-sm"><use href="#ic-plus"/></svg></button>
+                    </div>
+                    <button class="cart-remove-btn" onclick="updateCartQty(${item.id},0);app.render('cart');"><svg class="ic ic-sm"><use href="#ic-trash"/></svg></button>
+                </div>
+            </div>`).join('');
+
+        return `<div class="cart-page"><h2><svg class="ic ic-lg"><use href="#ic-bag"/></svg>购物车</h2>
+            ${items}
+            <div class="cart-summary">
+                <div class="row"><span>共 ${getCartCount()} 件商品</span><span></span></div>
+                <div class="row kcal"><span>预计摄入</span><span>${getCartKcal()} kcal</span></div>
+                <div class="row total"><span>合计</span><span>¥${getCartTotal().toFixed(2)}</span></div>
+            </div>
+            <button class="checkout-btn" onclick="app.go('checkout')">
+                <svg class="ic ic-sm"><use href="#ic-credit-card"/></svg>去结算
+            </button></div>`;
+    },
+
+    // ===== RENDER: CHECKOUT =====
+    renderCheckout() {
+        if (cart.length === 0) { app.go('cart'); return ''; }
+        if (!checkoutState) checkoutState = { payment:'wechat', pickup:'store' };
+        const cs = checkoutState;
+        const paymentMethods = [
+            { key:'wechat', label:'微信支付', icon:'ic-wechat', desc:'推荐使用' },
+            { key:'alipay', label:'支付宝', icon:'ic-alipay', desc:'' },
+        ];
+        const pickupMethods = [
+            { key:'store', label:'门店自取', desc:'体育西路 108 号 · 预计 15 分钟', icon:'ic-store' },
+            { key:'delivery', label:'外卖配送', desc:'配送费 ¥5 · 约 30 分钟', icon:'ic-delivery' },
+        ];
+        const renderPay = paymentMethods.map(m => `
+            <div class="checkout-card ${cs.payment===m.key?'selected':''}" onclick="checkoutState.payment='${m.key}';app.render('checkout');">
+                <div class="cc-row"><div><div class="cc-title"><svg width="22" height="22" style="margin-right:6px;vertical-align:middle;flex-shrink:0;"><use href="#${m.icon}"/></svg>${m.label}</div>${m.desc?`<div class="cc-desc">${m.desc}</div>`:''}</div>
+                <div class="radio-custom ${cs.payment===m.key?'checked':''}"></div></div>
+            </div>`).join('');
+        const renderPickup = pickupMethods.map(m => `
+            <div class="checkout-card ${cs.pickup===m.key?'selected':''}" onclick="checkoutState.pickup='${m.key}';app.render('checkout');">
+                <div class="cc-row"><div><div class="cc-title"><svg class="ic" style="margin-right:6px;vertical-align:middle;"><use href="#${m.icon}"/></svg>${m.label}</div><div class="cc-desc">${m.desc}</div></div>
+                <div class="radio-custom ${cs.pickup===m.key?'checked':''}"></div></div>
+            </div>`).join('');
+
+        return `<div class="checkout-page"><h2><svg class="ic ic-lg"><use href="#ic-credit-card"/></svg>确认订单</h2>
+            <div class="checkout-steps">
+                <div class="checkout-step active"><div class="step-num">1</div>确认订单</div>
+                <div class="checkout-step"><div class="step-num">2</div>支付</div>
+                <div class="checkout-step"><div class="step-num">3</div>完成</div>
+            </div>
+            <div class="checkout-section"><h4>支付方式</h4>${renderPay}</div>
+            <div class="checkout-section"><h4>取餐方式</h4>${renderPickup}</div>
+            <div class="checkout-section"><h4>订单明细</h4>
+                ${cart.map(i => `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span>${i.name}${i.custom?' ('+i.custom+')':''} x${i.qty}</span><span>¥${(i.price*i.qty).toFixed(2)}</span></div>`).join('')}
+            </div></div>
+            <div class="checkout-total-bar">
+                <div class="total-info"><div class="total-count">共 ${getCartCount()} 件</div><div class="total-price">¥${getCartTotal().toFixed(2)}</div></div>
+                <button class="btn-primary" style="flex:1.5;" onclick="app.placeOrder()">确认支付</button>
+            </div>`;
+    },
+
+    placeOrder() {
+        const order = {
+            id: 'MO' + Date.now().toString(36).toUpperCase(),
+            items: [...cart], total: getCartTotal(), kcal: getCartKcal(),
+            payment: checkoutState?.payment || 'wechat',
+            pickup: checkoutState?.pickup || 'store',
+            status: 'preparing', time: new Date().toLocaleString('zh-CN'), timestamp: Date.now()
+        };
+        orders.unshift(order);
+        cart = []; checkoutState = null;
+        saveState(); spawnParticles();
+        app.go('success', order.id);
+    },
+
+    // ===== RENDER: SUCCESS =====
+    renderSuccess(orderId) {
+        const order = orders.find(o => o.id === orderId);
+        if (!order) { app.go('orders'); return ''; }
+        return `<div class="success-page">
+            <div class="success-icon-wrap"><svg class="ic-xl" style="width:64px;height:64px;color:var(--green);"><use href="#ic-success"/></svg></div>
+            <h2>下单成功！</h2>
+            <div class="order-ref">${order.id}</div>
+            <div class="success-details">
+                <div class="sd-row"><span>共 ${order.items.reduce((s,i)=>s+i.qty,0)} 件商品</span><strong>¥${order.total.toFixed(2)}</strong></div>
+                <div class="sd-row"><span>预计摄入</span><span>${order.kcal} kcal</span></div>
+                <div class="sd-row"><span>取餐方式</span><span>${order.pickup==='store'?'门店自取':'外卖配送'}</span></div>
+            </div>
+            <div class="success-actions">
+                <button class="btn-outline" onclick="app.go('orders')"><svg class="ic ic-sm"><use href="#ic-clipboard"/></svg>查看订单</button>
+                <button class="btn-primary" onclick="app.go('menu')"><svg class="ic ic-sm"><use href="#ic-cup"/></svg>继续点单</button>
+            </div></div>`;
+    },
+
+    // ===== RENDER: ORDERS =====
+    renderOrders() {
+        orders.forEach(o => {
+            const e = Date.now() - o.timestamp;
+            if (o.status==='preparing' && e>30000) o.status='ready';
+            if (o.status==='ready' && e>90000) o.status='delivered';
+        });
+        saveState();
+        if (orders.length === 0) {
+            return `<div class="orders-page"><h2><svg class="ic ic-lg"><use href="#ic-clipboard"/></svg>订单追踪</h2>
+                <div class="empty-state"><div class="empty-visual"><svg class="ic-2xl" style="color:var(--border)"><use href="#ic-empty-orders"/></svg></div>
+                <p>暂无订单记录</p><p style="font-size:12px;margin-top:4px;color:var(--gray);">下单后将在此处追踪你的订单状态</p></div></div>`;
+        }
+        const list = orders.map(o => {
+            const sc = o.status==='preparing'?'preparing':o.status==='ready'?'ready':'delivered';
+            const st = o.status==='preparing'?'制备中':o.status==='ready'?'待取餐':'已完成';
+            return `<div class="order-card" onclick="app.go('order-detail','${o.id}')">
+                <div class="order-card-header">
+                    <span class="order-id"><svg class="ic ic-sm"><use href="#ic-clipboard"/></svg>${o.id}</span>
+                    <span class="order-status ${sc}"><span class="status-dot"></span>${st}</span>
+                </div>
+                <p class="order-items">${o.items.map(i=>i.name).join('、')}</p>
+                <p class="order-total">¥${o.total.toFixed(2)} · ${o.items.reduce((s,i)=>s+i.qty,0)} 件</p>
+                <p class="order-time"><svg class="ic ic-sm"><use href="#ic-clock"/></svg>${o.time}</p>
+            </div>`;
+        }).join('');
+        return `<div class="orders-page"><h2><svg class="ic ic-lg"><use href="#ic-clipboard"/></svg>订单追踪</h2>${list}</div>`;
+    },
+
+    // ===== RENDER: ORDER DETAIL =====
+    renderOrderDetail(orderId) {
+        const o = orders.find(o => o.id === orderId);
+        if (!o) { app.go('orders'); return ''; }
+        const steps = ['已下单','制备中','待取餐','已完成'];
+        const currentStep = o.status==='preparing'?1:o.status==='ready'?2:3;
+        const stepsHtml = steps.map((s,i) => {
+            let cls = '';
+            if (i < currentStep) cls = 'done';
+            else if (i === currentStep) cls = 'current';
+            return `<div class="od-step ${cls}"><div class="od-dot"></div><div class="od-label">${s}</div></div>`;
+        }).join('');
+        const itemsHtml = o.items.map(i => `
+            <div class="od-item">
+                <div class="od-item-img"><img src="${i.img}" alt="${i.name}"></div>
+                <div class="od-item-info"><div class="od-item-name">${i.name} x${i.qty}</div>${i.custom?`<div class="od-item-opts">${i.custom}</div>`:''}</div>
+                <div class="od-item-price">¥${(i.price*i.qty).toFixed(2)}</div>
+            </div>`).join('');
+
+        return `<div class="order-detail-page">
+            <h2>订单详情 · ${o.id}</h2>
+            <div class="od-status-bar">${stepsHtml}</div>
+            <div class="checkout-section"><h4>商品明细</h4><div class="od-items-list">${itemsHtml}</div></div>
+            <div class="checkout-section"><h4>订单信息</h4>
+                <div style="font-size:13px;line-height:2;">
+                    <div>订单号：${o.id}</div><div>下单时间：${o.time}</div>
+                    <div>支付方式：${o.payment==='wechat'?'微信支付':'支付宝'}</div>
+                    <div>取餐方式：${o.pickup==='store'?'门店自取':'外卖配送'}</div>
+                    <div style="font-weight:800;margin-top:4px;">合计：¥${o.total.toFixed(2)} · ${o.kcal} kcal</div>
+                </div>
+            </div></div>`;
+    },
+
+    // ===== RENDER: LAB =====
+    renderLab() {
+        return `<div class="lab-page"><h2><svg class="ic ic-lg"><use href="#ic-flask"/></svg>实验室档案</h2>
+            <div class="lab-card" onclick="app.go('lab-detail','about')">
+                <h3><svg class="ic"><use href="#ic-sparkle"/></svg>MATTER & ORDER 质序实验室</h3>
+                <p>我们相信每一杯饮品都是物质与秩序的完美平衡。从原料的分子结构到出品的温度曲线，每一步都经过精密计算。</p>
+            </div>
+            <div class="lab-stats">
+                <div class="lab-stat"><div class="num">47</div><div class="lbl">项质控标准</div></div>
+                <div class="lab-stat"><div class="num">12</div><div class="lbl">产地直采</div></div>
+                <div class="lab-stat"><div class="num">3.2s</div><div class="lbl">平均出品速度</div></div>
+                <div class="lab-stat"><div class="num">99.7%</div><div class="lbl">客户满意度</div></div>
+            </div>
+            <div class="lab-card" style="margin-top:16px;" onclick="app.go('lab-detail','location')">
+                <h3><svg class="ic"><use href="#ic-pin"/></svg>实验室坐标</h3>
+                <p>广州 · 天河区体育西路 108 号<br>营业时间：09:00 - 22:00</p>
+            </div>
+            <div class="lab-card" onclick="app.go('lab-detail','philosophy')">
+                <h3><svg class="ic"><use href="#ic-leaf"/></svg>设计哲学</h3>
+                <p>极简主义实验室风格贯穿每一处细节。黑色代表严谨与秩序，绿色代表生命与原料。</p>
+            </div></div>`;
+    },
+
+    // ===== RENDER: LAB DETAIL =====
+    renderLabDetail(topic) {
+        const topics = {
+            about: { title:'质序实验室', icon:'ic-flask', text:'MATTER & ORDER 成立于 2024 年，由一群对饮品科学充满热情的食品工程师创立。我们将实验室的严谨态度带入每一杯饮品——从原料筛选的 47 项标准，到出品的温度、密度、甜度曲线，一切皆可量化、可追溯、可优化。<br><br>我们的核心团队包括食品科学家、调香师和设计师。每一款产品上市前需经过至少 200 次盲测和 3 轮配方迭代。我们不追逐季节限定，我们只呈现经过验证的最佳配方。' },
+            location: { title:'实验室坐标', icon:'ic-pin', text:'主实验室位于广州天河区体育西路 108 号，占地 280 平米，分为研发区、出品区和体验区三个功能区。<br><br>研发区配备 HPLC 液相色谱仪、折光仪、粘度计等专业设备，用于原料品质检测和配方研发。出品区采用模块化工作站设计，每位操作员经过 120 小时培训方可上岗。体验区以开放式吧台呈现，顾客可近距离观看每一杯饮品的诞生过程。<br><br>营业时间：09:00 - 22:00（全年无休）<br>实验室专线：400-001-0001' },
+            philosophy: { title:'设计哲学', icon:'ic-leaf', text:'极简主义是对复杂的克制，而非对简单的妥协。<br><br>我们的视觉系统以黑色与绿色为核心——黑色象征科学实验的严谨与秩序，绿色象征原料的生命力与自然的馈赠。每一个纯度标签都是一份可公开的检测报告；每一个价格背后都是一条可追溯的供应链。<br><br>我们不使用过度包装。杯子是可降解的 PLA 材质，吸管是竹纤维制品。因为对地球的尊重，也是实验室的基本素养。' }
+        };
+        const t = topics[topic] || topics['about'];
+        return `<div class="lab-detail-page">
+            <div class="lab-detail-img"><svg class="ic-2xl" style="width:64px;height:64px;"><use href="#${t.icon}"/></svg></div>
+            <h2>${t.title}</h2>
+            <p style="margin-top:12px;">${t.text}</p></div>`;
+    },
+
+    updateBadges() {
+        const count = getCartCount();
+        ['header-badge','nav-cart-badge'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (count > 0) { el.style.display = 'flex'; el.textContent = count > 99 ? '99+' : count; }
+            else { el.style.display = 'none'; }
+        });
+    }
+};
+
+// ===== DATA =====
+const products = [
+    { id:1, name:'牛油果羽衣甘蓝奶昔', cat:'smoothie', price:28, purity:'FRUIT 92%', kcal:180, img:'images/p01-avocado-kale.png', desc:'墨西哥进口牛油果与有机羽衣甘蓝的黄金配比，搭配燕麦奶基底，丝滑醇厚中带着清新的草本气息。每一口都是对健康的致敬。', ingredients:'墨西哥牛油果 / 鲜榨甘蓝汁 / 燕麦奶 / 奇亚籽' },
+    { id:2, name:'冰博克冷萃大红袍', cat:'tea', price:24, purity:'TEA 100%', kcal:60, img:'images/p02-dahongpao.png', desc:'武夷山核心产区大红袍，经 12 小时冰博克提纯工艺，去除多余水分，茶韵浓缩至极致。0 卡糖加持，纯粹无负担。', ingredients:'武夷大红袍 / 提纯牛奶 / 0 卡糖 / 冰博克工艺' },
+    { id:3, name:'野草莓实验室奶昔', cat:'smoothie', price:32, purity:'FRESH 100%', kcal:210, img:'images/03-strawberryp.png', desc:'当季红颜草莓经液氮速冻锁鲜，与纯正酸奶在低温环境下高速混合，保留完整果肉纤维。顶部撒上手工烘焙坚果碎。', ingredients:'当季红颜草莓 / 纯正酸奶 / 坚果碎 / 蜂蜜' },
+    { id:4, name:'凤凰单丛鸭屎香', cat:'tea', price:36, purity:'TEA 100%', kcal:10, img:'images/p04-duck-shit-tea.png', desc:'潮州凤凰山百年古树单丛，独特银花香型。手工炭焙工艺，茶汤金黄透亮，回甘强劲持久。真正的工夫茶实验室演绎。', ingredients:'凤凰单丛古树茶 / 山泉水 / 手工炭焙' },
+    { id:5, name:'芒果百香果能量碗', cat:'smoothie', price:30, purity:'FRUIT 95%', kcal:240, img:'images/p05-mango.png', desc:'热带风情满载的能量炸弹。台农芒果与百香果的酸甜碰撞，加入燕麦与希腊酸奶，可作为代餐享用。', ingredients:'台农芒果 / 百香果 / 希腊酸奶 / 燕麦 / 蜂花粉' },
+    { id:6, name:'茉莉银针冷萃', cat:'tea', price:22, purity:'TEA 100%', kcal:5, img:'images/06-jasmine.png', desc:'福州茉莉银针，七次窨制工艺。冷萃 8 小时缓慢释放花香，清冽如泉，花香与茶韵在舌尖层层绽放。', ingredients:'福州茉莉银针 / 冷萃山泉水 / 七次窨制' },
+    { id:7, name:'有机黄豆粉物料包', cat:'material', price:45, purity:'ORGANIC 100%', kcal:320, img:'images/p07-soyp.png', desc:'精选东北非转基因有机黄豆，实验室级别低温研磨，保留完整营养。可搭配任意奶昔或茗茶，定制专属风味。净重 500g。', ingredients:'东北有机黄豆 / 低温研磨 / 非转基因认证' },
+    { id:8, name:'实验室定制蜂蜜组', cat:'material', price:68, purity:'RAW 100%', kcal:280, img:'images/p08-honey.png', desc:'三款单一花源蜂蜜组合装：荔枝蜜 / 洋槐蜜 / 百花蜜。每一款均来自可追溯蜂场，未经任何加热处理，保留活性酶。', ingredients:'荔枝蜜 150g / 洋槐蜜 150g / 百花蜜 150g' },
+    { id:9, name:'抹茶椰子拿铁', cat:'smoothie', price:29, purity:'MATCHA 100%', kcal:160, img:'images/p09-matcha-coconut.png', desc:'日本宇治抹茶与海南鲜椰的跨纬度对话。抹茶的微苦被椰奶的天然甜感完美包裹，层次分明，回味悠长。', ingredients:'宇治抹茶粉 / 海南椰子水 / 椰奶 / 龙舌兰糖浆' },
+    { id:10, name:'武夷肉桂岩茶', cat:'tea', price:42, purity:'ROCK TEA 100%', kcal:8, img:'images/p10-rougui.png', desc:'武夷山正岩核心产区肉桂，传统炭焙足火工艺。桂皮香与花果香交融，岩韵明显，十泡之后仍有余香。', ingredients:'武夷正岩肉桂 / 山泉水 / 传统炭焙足火' },
+];
+
+let cart = [], orders = [], activeCat = 'all', customizeState = {}, checkoutState = null;
+
+try { const c=localStorage.getItem('mo_cart_v3'); if(c) cart=JSON.parse(c); const o=localStorage.getItem('mo_orders_v3'); if(o) orders=JSON.parse(o); } catch(e){}
+function saveState() { try { localStorage.setItem('mo_cart_v3',JSON.stringify(cart)); localStorage.setItem('mo_orders_v3',JSON.stringify(orders)); } catch(e){} }
+
+function findProduct(id) { return products.find(p=>p.id===id); }
+function getCartTotal() { return cart.reduce((s,i)=>s+i.price*i.qty,0); }
+function getCartCount() { return cart.reduce((s,i)=>s+i.qty,0); }
+function getCartKcal() { return cart.reduce((s,i)=>s+(i.kcal||0)*i.qty,0); }
+
+function setCat(cat) { activeCat = cat; app.render('menu'); }
+
+function addToCart(id) {
+    const p = findProduct(id); if (!p) return;
+    const existing = cart.find(c => c.id === id);
+    if (existing) { existing.qty++; }
+    else { cart.push({ id:p.id, name:p.name, price:p.price, img:p.img, desc:p.ingredients.split('/')[0].trim(), kcal:p.kcal, qty:1 }); }
+    saveState(); app.updateBadges(); showToast('已添加 ' + p.name);
+    const badge = document.getElementById('header-badge');
+    if (badge) { badge.classList.add('bump'); setTimeout(() => badge.classList.remove('bump'), 350); }
+}
+
+function addToCartWithCustom(id) {
+    const p = findProduct(id); if (!p) return;
+    const cs = customizeState[id] || { size:'中杯', sugar:'半糖', ice:'正常冰', toppings:[] };
+    const addPrice = (cs.size==='大杯'?4:0) + cs.toppings.length * 3;
+    const customStr = [cs.size, cs.sugar, cs.ice, ...cs.toppings].filter(Boolean).join(' · ');
+    cart.push({
+        id: p.id + '-custom-' + Date.now(), name: p.name, price: p.price + addPrice,
+        img: p.img, desc: p.ingredients.split('/')[0].trim(), kcal: p.kcal,
+        qty: 1, custom: customStr
+    });
+    delete customizeState[id];
+    saveState(); app.updateBadges(); showToast('已添加定制 ' + p.name);
+    const badge = document.getElementById('header-badge');
+    if (badge) { badge.classList.add('bump'); setTimeout(() => badge.classList.remove('bump'), 350); }
+}
+
+function updateCartQty(id, newQty) {
+    if (newQty <= 0) { cart = cart.filter(c => c.id !== id); }
+    else { const existing = cart.find(c => c.id === id); if (existing) existing.qty = newQty; }
+    saveState(); app.updateBadges();
+}
+
+function setCustom(id, key, val) { if (!customizeState[id]) customizeState[id] = { size:'中杯', sugar:'半糖', ice:'正常冰', toppings:[] }; customizeState[id][key] = val; app.render('customize', parseInt(id)); }
+function toggleTopping(id, topping) { if (!customizeState[id]) customizeState[id] = { size:'中杯', sugar:'半糖', ice:'正常冰', toppings:[] }; const cs = customizeState[id]; const idx = cs.toppings.indexOf(topping); if (idx > -1) cs.toppings.splice(idx, 1); else cs.toppings.push(topping); app.render('customize', parseInt(id)); }
+
+// ===== TOAST =====
+let toastTimer;
+function showToast(msg) {
+    const t = document.getElementById('toast'); const tm = document.getElementById('toast-msg');
+    if (!t || !tm) return;
+    tm.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// ===== PARTICLES =====
+function spawnParticles() {
+    const container = document.getElementById('particles');
+    if (!container) return;
+    const colors = ['#a7c957','#e07a5f','#f4a261','#1a1a1a','#8ab03e'];
+    let html = '';
+    for (let i = 0; i < 30; i++) {
+        const x = Math.random() * 100; const d = Math.random() * 0.8 + 0.2;
+        const c = colors[Math.floor(Math.random() * colors.length)];
+        const s = Math.random() * 6 + 4;
+        html += `<div class="particle" style="left:${x}%;top:30%;width:${s}px;height:${s}px;background:${c};animation-delay:${d}s;animation-duration:${1+d*0.8}s;"></div>`;
+    }
+    container.innerHTML = html;
+    setTimeout(() => { container.innerHTML = ''; }, 2000);
+}
+
+// ===== INIT =====
+app.init();
+</script>
+</body>
+</html>
